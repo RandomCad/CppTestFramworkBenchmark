@@ -1,0 +1,10 @@
+# CMake FetchContent sources + build output, per framework/variant project
+deps/
+build/
+
+# run_benchmarks.py output
+/results/
+
+# Python
+__pycache__/
+*.pyc

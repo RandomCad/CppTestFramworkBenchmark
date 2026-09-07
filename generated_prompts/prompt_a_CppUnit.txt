@@ -1,0 +1,110 @@
+You are generating a standalone benchmark test project for the C++ unit
+testing framework **CppUnit**. This project is one of several
+equivalent projects (one per framework, this one being the "loop variant")
+being compared for **build time** and **test execution time**. All of them
+must run an identical computational workload so that any timing difference
+reflects framework overhead only, not differences in what is being tested.
+
+### Fixed workload specification (do not alter the logic — only translate
+### syntax into CppUnit's idioms)
+
+- Use a fixed-seed PRNG: `std::mt19937` seeded with `42`, drawing from
+  `std::uniform_int_distribution<int>` over a reasonable range (e.g.
+  `[-1000000, 1000000]`).
+- For each generated value `x`, verify at runtime that incrementing `x`
+  twice gives the same result as adding 2:
+  ```cpp
+  int a = x;
+  a++;
+  a++;
+  int b = x + 2;
+  ASSERT(a == b); // translate to CppUnit's assertion macro
+  ```
+  The check must not be foldable at compile time — `x` must come from the
+  runtime PRNG call, never a literal or `constexpr`.
+- Total number of checks is controlled by a single named constant:
+  ```cpp
+  constexpr int ITERATIONS = 1'000'000;
+  ```
+  Use this exact constant name and starting value, so it can be tuned
+  later without touching test logic.
+- The PRNG engine, seed, and distribution parameters must be identical to
+  every other framework's implementation (and to the parameterized variant,
+  if one is generated for this same framework), so the exact same sequence
+  of values is checked everywhere.
+
+### Test shape
+
+A single test case/test function that loops `ITERATIONS` times; each
+iteration draws one value from the PRNG and performs the check via
+CppUnit's assertion mechanism. This must work regardless of what
+CppUnit supports elsewhere — it is the one variant compared across
+*all* frameworks.
+
+### Build requirements — CMake only, nothing else
+
+This is a hard requirement: **the project must consist of nothing but
+CMake and source files.** No shell scripts, Makefile recipes, or manual
+steps of any kind — not for fetching CppUnit, not for building, not
+for anything. Everything happens through a plain `cmake -S . -B build`
+followed by `cmake --build build --target test_loop`, invoked externally
+by a benchmark runner that is not part of your output.
+
+- Use CMake's `FetchContent` module in `CMakeLists.txt` to declare and fetch
+  CppUnit (`FetchContent_Declare` + `FetchContent_MakeAvailable`).
+  Only if CppUnit genuinely cannot be consumed this way, use
+  `ExternalProject_Add` instead — the fetch must still be triggered purely
+  by CMake configure/build.
+- Set `FETCHCONTENT_BASE_DIR` to `${CMAKE_SOURCE_DIR}/deps` so fetched
+  sources land in `./deps/`.
+- Support being reconfigured with `-DFETCHCONTENT_FULLY_DISCONNECTED=ON`
+  (CMake's built-in flag), which must skip all download/update steps and
+  use whatever is already in `./deps/` — configure must fail if it isn't
+  there rather than silently fetching anyway. If CppUnit requires
+  `ExternalProject_Add` instead, implement an equivalent connected/
+  disconnected toggle driven by the same variable.
+- Define exactly one executable **target**, named `test_loop`, so the
+  runner can build and time it via `cmake --build build --target
+  test_loop`. Do not override `RUNTIME_OUTPUT_DIRECTORY` — leave the
+  binary at CMake's default location so it lands directly at
+  `./build/test_loop`.
+- Use the same compiler optimization level as every other project: `-O3`.
+  Set it explicitly via `target_compile_options(test_loop PRIVATE -O3)`
+  rather than relying on `CMAKE_BUILD_TYPE`, so it's guaranteed regardless
+  of what build type the runner configures with.
+
+### Directory & naming conventions (required for automated benchmarking)
+
+These are non-negotiable, even if they feel arbitrary in isolation — a
+single external runner benchmarks every framework's project, so each must
+expose the same layout:
+
+- Fetched sources live in `./deps/`, build output in `./build/`, exactly as
+  set up above. Never delete or recreate either directory yourselves —
+  CMake does that as part of configuring/building, and the external
+  benchmark runner controls cleanup between repeated runs.
+- The resulting test executable must be written to exactly
+  `./build/test_loop`. No other name, extension, or suffix.
+
+### Constraints
+
+- **No timing/measurement code of any kind** — no `std::chrono`, `clock()`,
+  benchmark libraries, or printed durations anywhere in `test.cpp`,
+  `main.cpp`, or `test.hpp`. Timing happens entirely outside your output, in
+  the benchmark runner. Your only job is to make the check run correctly
+  and expose the `test_loop` target.
+- Keep everything minimal: no custom reporters, extra logging, or
+  framework features beyond what's needed to run the check. Overhead must
+  be attributable to the framework's core mechanics, not extras.
+- Do not change `ITERATIONS`, the PRNG, the seed, or the check logic —
+  only adapt syntax to CppUnit.
+
+### Deliverables
+
+Output only the files needed to build and run this, ready to drop into a
+directory and configure/build with plain `cmake` commands — nothing else:
+- `CMakeLists.txt`
+- `test.cpp`
+- `main.cpp` — only if CppUnit requires a hand-written `main()`
+- `test.hpp` — only if it genuinely helps keep `test.cpp` clean; otherwise
+  omit it

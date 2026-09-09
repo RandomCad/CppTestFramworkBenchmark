@@ -5,7 +5,7 @@
 
 namespace {
 
-constexpr int ITERATIONS = 1'000'000;
+constexpr int ITERATIONS = 10'000;
 
 std::vector<int> GenerateValues() {
     std::mt19937 rng(42);

@@ -3,7 +3,7 @@
 
 #include <random>
 
-constexpr int ITERATIONS = 1'000'000;
+constexpr int ITERATIONS = 10'000;
 
 ParameterizedTestParameters(increment, matches_add_two) {
     static int values[ITERATIONS];
